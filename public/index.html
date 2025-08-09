@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Socket Chat</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --card: #111827;
+        --muted: #9ca3af;
+        --text: #e5e7eb;
+        --accent: #3b82f6;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        background: var(--bg);
+        color: var(--text);
+      }
+      .container {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 16px;
+      }
+      header {
+        padding: 16px;
+        background: linear-gradient(135deg, #1f2937, #0b1220);
+        border-bottom: 1px solid #1f2937;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      #user-list {
+        background: var(--card);
+        border: 1px solid #1f2937;
+        border-radius: 10px;
+        padding: 12px;
+        height: calc(100vh - 140px);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      #user-list h2 {
+        font-size: 14px;
+        margin: 0 0 8px;
+        color: var(--muted);
+      }
+      #user-list-items {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+      }
+      #user-list-items li {
+        padding: 8px 10px;
+        border-radius: 8px;
+        margin-bottom: 6px;
+        background: #0b1220;
+        color: var(--text);
+      }
+
+      #chat-container {
+        background: var(--card);
+        border: 1px solid #1f2937;
+        border-radius: 10px;
+        padding: 12px;
+        display: grid;
+        grid-template-rows: 1fr auto;
+        height: calc(100vh - 140px);
+      }
+      #chat-window {
+        overflow-y: auto;
+        padding-right: 6px;
+      }
+      .msg {
+        display: flex;
+        margin: 10px 0;
+      }
+      .msg.theirs {
+        justify-content: flex-start;
+      }
+      .msg.mine {
+        justify-content: flex-end;
+      }
+      .bubble {
+        max-width: 75%;
+        background: #0b1220;
+        padding: 8px 10px;
+        border-radius: 12px;
+        line-height: 1.35;
+        border: 1px solid #1f2937;
+      }
+      .msg.mine .bubble {
+        background: rgba(59, 130, 246, 0.15);
+        border-color: #1e40af;
+      }
+      .meta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+
+      form#chat-form {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #message-input {
+        flex: 1;
+        padding: 10px 12px;
+        background: #0b1220;
+        color: var(--text);
+        border: 1px solid #1f2937;
+        border-radius: 10px;
+      }
+      button {
+        background: var(--accent);
+        color: white;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:hover {
+        filter: brightness(1.1);
+      }
+
+      /* Username modal */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .hidden {
+        display: none;
+      }
+      .modal {
+        background: var(--card);
+        border: 1px solid #1f2937;
+        border-radius: 12px;
+        padding: 20px;
+        width: 320px;
+      }
+      .modal h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      #username-input {
+        width: 100%;
+        padding: 10px 12px;
+        margin: 8px 0 12px;
+        background: #0b1220;
+        color: var(--text);
+        border: 1px solid #1f2937;
+        border-radius: 10px;
+      }
+
+      @media (max-width: 800px) {
+        .container {
+          grid-template-columns: 1fr;
+        }
+        #user-list {
+          height: auto;
+          order: 2;
+        }
+        #chat-container {
+          height: calc(100vh - 210px);
+          order: 1;
+        }
+        .bubble {
+          max-width: 85%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Socket Chat</h1>
+    </header>
+    <div class="container">
+      <div id="user-list">
+        <h2>Online Users</h2>
+        <ul id="user-list-items"></ul>
+      </div>
+      <div id="chat-container">
+        <div id="chat-window"></div>
+        <form id="chat-form" action="javascript:void(0)">
+          <input
+            type="text"
+            id="message-input"
+            placeholder="Type your message here..."
+            autocomplete="off"
+            required
+          />
+          <button type="submit">Send</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Username modal (no AJAX, just Socket.IO) -->
+    <div id="username-modal" class="modal-backdrop">
+      <div class="modal">
+        <h2>Choose a username</h2>
+        <form id="username-form" action="javascript:void(0)">
+          <input
+            id="username-input"
+            type="text"
+            placeholder="e.g. Alex"
+            maxlength="24"
+            autofocus
+            required
+          />
+          <button type="submit">Join chat</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      const chatWindow = document.getElementById("chat-window");
+      const userList = document.getElementById("user-list-items");
+      const messageInput = document.getElementById("message-input");
+      const chatForm = document.getElementById("chat-form");
+      const usernameModal = document.getElementById("username-modal");
+      const usernameForm = document.getElementById("username-form");
+      const usernameInput = document.getElementById("username-input");
+
+      let username = null;
+
+      function timeFrom(ts) {
+        try {
+          return new Date(ts).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        } catch {
+          return "";
+        }
+      }
+
+      function appendSystemMessage(text) {
+        const row = document.createElement("div");
+        row.className = "msg theirs";
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.innerHTML = `<div class="meta">System</div>${text}`;
+        row.appendChild(bubble);
+        chatWindow.appendChild(row);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      }
+
+      function appendChatMessage({ username: from, message, timestamp }) {
+        const mine = from === username;
+        const row = document.createElement("div");
+        row.className = `msg ${mine ? "mine" : "theirs"}`;
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        const time = timestamp ? ` • ${timeFrom(timestamp)}` : "";
+        bubble.innerHTML = `<div class="meta">${from}${time}</div>${message}`;
+        row.appendChild(bubble);
+        chatWindow.appendChild(row);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      }
+
+      // inbound events
+      socket.on("userJoined", (name) =>
+        appendSystemMessage(`${name} joined the chat`)
+      );
+      socket.on("userLeft", (name) =>
+        appendSystemMessage(`${name} left the chat`)
+      );
+      socket.on("userList", (users) => {
+        userList.innerHTML = "";
+        users.forEach((user) => {
+          const li = document.createElement("li");
+          li.textContent = user;
+          userList.appendChild(li);
+        });
+      });
+      socket.on("chatMessage", appendChatMessage);
+
+      // username modal handling
+      usernameForm.addEventListener("submit", function () {
+        const value = usernameInput.value.trim() || "Anonymous";
+        username = value;
+        socket.emit("join", username);
+        appendSystemMessage(`You joined as ${username}`);
+        usernameModal.classList.add("hidden");
+        messageInput.focus();
+      });
+
+      // outbound events
+      chatForm.addEventListener("submit", function () {
+        const text = messageInput.value.trim();
+        if (!text) return;
+        if (!username) {
+          usernameModal.classList.remove("hidden");
+          usernameInput.focus();
+          return;
+        }
+        socket.emit("chatMessage", text);
+        messageInput.value = "";
+        messageInput.focus();
+      });
+    </script>
+  </body>
+</html>
